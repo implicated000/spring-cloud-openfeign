@@ -16,25 +16,7 @@
 
 package org.springframework.cloud.openfeign.support;
 
-import java.lang.annotation.Annotation;
-import java.lang.reflect.Method;
-import java.lang.reflect.Parameter;
-import java.lang.reflect.Type;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-
-import feign.Contract;
-import feign.Feign;
-import feign.MethodMetadata;
-import feign.Param;
-import feign.Request;
-
+import feign.*;
 import org.springframework.cloud.openfeign.AnnotatedParameterProcessor;
 import org.springframework.cloud.openfeign.annotation.PathVariableParameterProcessor;
 import org.springframework.cloud.openfeign.annotation.QueryMapParameterProcessor;
@@ -57,6 +39,12 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 
+import java.lang.annotation.Annotation;
+import java.lang.reflect.Method;
+import java.lang.reflect.Parameter;
+import java.lang.reflect.Type;
+import java.util.*;
+
 import static feign.Util.checkState;
 import static feign.Util.emptyToNull;
 import static org.springframework.cloud.openfeign.support.FeignUtils.addTemplateParameter;
@@ -69,8 +57,7 @@ import static org.springframework.core.annotation.AnnotatedElementUtils.findMerg
  * @author Aram Peres
  * @author Olga Maciaszek-Sharma
  */
-public class SpringMvcContract extends Contract.BaseContract
-		implements ResourceLoaderAware {
+public class SpringMvcContract extends Contract.BaseContract implements ResourceLoaderAware {
 
 	private static final String ACCEPT = "Accept";
 
@@ -208,8 +195,7 @@ public class SpringMvcContract extends Contract.BaseContract
 	}
 
 	@Override
-	protected void processAnnotationOnMethod(MethodMetadata data,
-			Annotation methodAnnotation, Method method) {
+	protected void processAnnotationOnMethod(MethodMetadata data, Annotation methodAnnotation, Method method) {
 		if (!RequestMapping.class.isInstance(methodAnnotation) && !methodAnnotation
 				.annotationType().isAnnotationPresent(RequestMapping.class)) {
 			return;
@@ -273,8 +259,7 @@ public class SpringMvcContract extends Contract.BaseContract
 	}
 
 	@Override
-	protected boolean processAnnotationsOnParameter(MethodMetadata data,
-			Annotation[] annotations, int paramIndex) {
+	protected boolean processAnnotationsOnParameter(MethodMetadata data, Annotation[] annotations, int paramIndex) {
 		boolean isHttpAnnotation = false;
 
 		AnnotatedParameterProcessor.AnnotatedParameterContext context = new SimpleAnnotatedParameterContext(

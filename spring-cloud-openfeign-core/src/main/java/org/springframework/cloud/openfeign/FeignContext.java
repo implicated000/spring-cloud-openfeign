@@ -28,6 +28,7 @@ import org.springframework.cloud.context.named.NamedContextFactory;
 public class FeignContext extends NamedContextFactory<FeignClientSpecification> {
 
 	public FeignContext() {
+		// FeignClientsConfiguration 是 Feign的默认全局配置
 		super(FeignClientsConfiguration.class, "feign", "feign.client.name");
 	}
 

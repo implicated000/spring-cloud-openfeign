@@ -16,17 +16,6 @@
 
 package org.springframework.cloud.openfeign;
 
-import java.io.IOException;
-import java.net.MalformedURLException;
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.net.URL;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
 import org.springframework.beans.factory.annotation.AnnotatedBeanDefinition;
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.beans.factory.config.BeanDefinitionHolder;
@@ -52,6 +41,13 @@ import org.springframework.util.Assert;
 import org.springframework.util.ClassUtils;
 import org.springframework.util.StringUtils;
 
+import java.io.IOException;
+import java.net.MalformedURLException;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.URL;
+import java.util.*;
+
 /**
  * @author Spencer Gibb
  * @author Jakub Narloch
@@ -59,7 +55,7 @@ import org.springframework.util.StringUtils;
  * @author Gang Li
  */
 class FeignClientsRegistrar
-		implements ImportBeanDefinitionRegistrar, ResourceLoaderAware, EnvironmentAware {
+	implements ImportBeanDefinitionRegistrar, ResourceLoaderAware, EnvironmentAware {
 
 	// patterned after Spring Integration IntegrationComponentScanRegistrar
 	// and RibbonClientsConfigurationRegistgrar
@@ -73,12 +69,12 @@ class FeignClientsRegistrar
 
 	static void validateFallback(final Class clazz) {
 		Assert.isTrue(!clazz.isInterface(),
-				"Fallback class must implement the interface annotated by @FeignClient");
+			"Fallback class must implement the interface annotated by @FeignClient");
 	}
 
 	static void validateFallbackFactory(final Class clazz) {
 		Assert.isTrue(!clazz.isInterface(), "Fallback factory must produce instances "
-				+ "of fallback classes that implement the interface annotated by @FeignClient");
+			+ "of fallback classes that implement the interface annotated by @FeignClient");
 	}
 
 	static String getName(String name) {
@@ -91,14 +87,12 @@ class FeignClientsRegistrar
 			String url;
 			if (!name.startsWith("http://") && !name.startsWith("https://")) {
 				url = "http://" + name;
-			}
-			else {
+			} else {
 				url = name;
 			}
 			host = new URI(url).getHost();
 
-		}
-		catch (URISyntaxException e) {
+		} catch (URISyntaxException e) {
 		}
 		Assert.state(host != null, "Service id not legal hostname (" + name + ")");
 		return name;
@@ -111,8 +105,7 @@ class FeignClientsRegistrar
 			}
 			try {
 				new URL(url);
-			}
-			catch (MalformedURLException e) {
+			} catch (MalformedURLException e) {
 				throw new IllegalArgumentException(url + " is malformed", e);
 			}
 		}
@@ -139,53 +132,60 @@ class FeignClientsRegistrar
 
 	@Override
 	public void registerBeanDefinitions(AnnotationMetadata metadata,
-			BeanDefinitionRegistry registry) {
+										BeanDefinitionRegistry registry) {
+		// 给 @EnableFeignClients 的全局默认配置（注解的 defaultConfiguration 属性）创建 BeanDefinition 对象并注入到容器中
 		registerDefaultConfiguration(metadata, registry);
+		// 给标有了 @FeignClient 的类创建 BeanDefinition 对象并注入到容器中
 		registerFeignClients(metadata, registry);
 	}
 
 	private void registerDefaultConfiguration(AnnotationMetadata metadata,
-			BeanDefinitionRegistry registry) {
+											  BeanDefinitionRegistry registry) {
 		Map<String, Object> defaultAttrs = metadata
-				.getAnnotationAttributes(EnableFeignClients.class.getName(), true);
+			.getAnnotationAttributes(EnableFeignClients.class.getName(), true);
 
 		if (defaultAttrs != null && defaultAttrs.containsKey("defaultConfiguration")) {
 			String name;
 			if (metadata.hasEnclosingClass()) {
 				name = "default." + metadata.getEnclosingClassName();
-			}
-			else {
+			} else {
 				name = "default." + metadata.getClassName();
 			}
-			registerClientConfiguration(registry, name,
-					defaultAttrs.get("defaultConfiguration"));
+			registerClientConfiguration(registry, name, defaultAttrs.get("defaultConfiguration"));
 		}
 	}
 
-	public void registerFeignClients(AnnotationMetadata metadata,
-			BeanDefinitionRegistry registry) {
+	public void registerFeignClients(AnnotationMetadata metadata, BeanDefinitionRegistry registry) {
+		// 获取ClassPath扫描器
 		ClassPathScanningCandidateComponentProvider scanner = getScanner();
+		// 为扫描器设置资源加载器
 		scanner.setResourceLoader(this.resourceLoader);
 
 		Set<String> basePackages;
 
+		// 获取 @EnableFeignClients 注解的属性 map
 		Map<String, Object> attrs = metadata
-				.getAnnotationAttributes(EnableFeignClients.class.getName());
+			.getAnnotationAttributes(EnableFeignClients.class.getName());
 		AnnotationTypeFilter annotationTypeFilter = new AnnotationTypeFilter(
-				FeignClient.class);
+			FeignClient.class);
+		// 获取 @EnableFeignClients 注解的 clients 属性
 		final Class<?>[] clients = attrs == null ? null
-				: (Class<?>[]) attrs.get("clients");
+			: (Class<?>[]) attrs.get("clients");
+		// 如果 @EnableFeignClients 注解未指定 clients 属性则扫描添加（扫描过滤条件为：标注有 @FeignClient 的类）
 		if (clients == null || clients.length == 0) {
 			scanner.addIncludeFilter(annotationTypeFilter);
 			basePackages = getBasePackages(metadata);
 		}
+		// 如果 @EnableFeignClients 注解已指定 clients 属性，则直接添加，不再扫描（从这里可以看出，为了加快容器启动速度，建议都指定 clients 属性）
 		else {
 			final Set<String> clientClasses = new HashSet<>();
 			basePackages = new HashSet<>();
+			// 扫描 client
 			for (Class<?> clazz : clients) {
 				basePackages.add(ClassUtils.getPackageName(clazz));
 				clientClasses.add(clazz.getCanonicalName());
 			}
+			// 过滤标注有 @FeignClient 的类
 			AbstractClassTestingTypeFilter filter = new AbstractClassTestingTypeFilter() {
 				@Override
 				protected boolean match(ClassMetadata metadata) {
@@ -193,45 +193,58 @@ class FeignClientsRegistrar
 					return clientClasses.contains(cleaned);
 				}
 			};
+			// 同时满足
 			scanner.addIncludeFilter(
-					new AllTypeFilter(Arrays.asList(filter, annotationTypeFilter)));
+				new AllTypeFilter(Arrays.asList(filter, annotationTypeFilter)));
 		}
 
+		// 遍历最终获取到的 @FeignClient 注解类的集合
 		for (String basePackage : basePackages) {
 			Set<BeanDefinition> candidateComponents = scanner
-					.findCandidateComponents(basePackage);
+				.findCandidateComponents(basePackage);
 			for (BeanDefinition candidateComponent : candidateComponents) {
+				// 判断是否是带有注解的 Bean
 				if (candidateComponent instanceof AnnotatedBeanDefinition) {
+					// 验证带注释的类必须是接口，不是接口则直接抛出异常
 					// verify annotated class is an interface
 					AnnotatedBeanDefinition beanDefinition = (AnnotatedBeanDefinition) candidateComponent;
 					AnnotationMetadata annotationMetadata = beanDefinition.getMetadata();
 					Assert.isTrue(annotationMetadata.isInterface(),
-							"@FeignClient can only be specified on an interface");
+						"@FeignClient can only be specified on an interface");
 
+					// 获取 @FeignClient 注解的属性值
 					Map<String, Object> attributes = annotationMetadata
-							.getAnnotationAttributes(
-									FeignClient.class.getCanonicalName());
+						.getAnnotationAttributes(
+							FeignClient.class.getCanonicalName());
 
+					// 获取 clientName 的值，也就是在构造器的参数值
 					String name = getClientName(attributes);
-					registerClientConfiguration(registry, name,
-							attributes.get("configuration"));
+					// 同上一个方法最后调用的方法，注入 @FeignClient中的configuration对象到容器中，name：name.feignClientSpecification
+					registerClientConfiguration(registry, name, attributes.get("configuration"));
 
-					registerFeignClient(registry, annotationMetadata, attributes);
+					// 循环注入 @FeignClient 对象，name：className
+					registerFeignClient(registry,
+						annotationMetadata,
+						attributes);
 				}
 			}
 		}
 	}
 
-	private void registerFeignClient(BeanDefinitionRegistry registry,
-			AnnotationMetadata annotationMetadata, Map<String, Object> attributes) {
+	private void registerFeignClient(BeanDefinitionRegistry registry, AnnotationMetadata annotationMetadata, Map<String, Object> attributes) {
+		// 获取类名称
 		String className = annotationMetadata.getClassName();
+		// BeanDefinitionBuilder的主要作用就是构建一个AbstractBeanDefinition,AbstractBeanDefinition类最终被构建成一个BeanDefinitionHolder然后注册到Spring中
+		// 注意：beanDefinition类为FeignClientFactoryBean，故在Spring获取类的时候实际返回的是FeignClientFactoryBean类
 		BeanDefinitionBuilder definition = BeanDefinitionBuilder
-				.genericBeanDefinition(FeignClientFactoryBean.class);
+			.genericBeanDefinition(FeignClientFactoryBean.class);
 		validate(attributes);
+		// 添加FeignClientFactoryBean的属性，
 		definition.addPropertyValue("url", getUrl(attributes));
 		definition.addPropertyValue("path", getPath(attributes));
 		String name = getName(attributes);
 		definition.addPropertyValue("name", name);
+		// Feign 容器名称
 		String contextId = getContextId(attributes);
 		definition.addPropertyValue("contextId", contextId);
 		definition.addPropertyValue("type", className);
@@ -240,11 +253,12 @@ class FeignClientsRegistrar
 		definition.addPropertyValue("fallbackFactory", attributes.get("fallbackFactory"));
 		definition.setAutowireMode(AbstractBeanDefinition.AUTOWIRE_BY_TYPE);
 
+		// 设置别名
 		String alias = contextId + "FeignClient";
 		AbstractBeanDefinition beanDefinition = definition.getBeanDefinition();
 
 		boolean primary = (Boolean) attributes.get("primary"); // has a default, won't be
-																// null
+		// null
 
 		beanDefinition.setPrimary(primary);
 
@@ -253,8 +267,10 @@ class FeignClientsRegistrar
 			alias = qualifier;
 		}
 
+		// 定义BeanDefinitionHolder，name是 Feign标识的className
 		BeanDefinitionHolder holder = new BeanDefinitionHolder(beanDefinition, className,
-				new String[] { alias });
+			new String[]{alias});
+		// 注入FeignClientFactoryBean
 		BeanDefinitionReaderUtils.registerBeanDefinition(holder, registry);
 	}
 
@@ -285,6 +301,7 @@ class FeignClientsRegistrar
 		}
 
 		contextId = resolve(contextId);
+		// check contextId
 		return getName(contextId);
 	}
 
@@ -309,7 +326,7 @@ class FeignClientsRegistrar
 		return new ClassPathScanningCandidateComponentProvider(false, this.environment) {
 			@Override
 			protected boolean isCandidateComponent(
-					AnnotatedBeanDefinition beanDefinition) {
+				AnnotatedBeanDefinition beanDefinition) {
 				boolean isCandidate = false;
 				if (beanDefinition.getMetadata().isIndependent()) {
 					if (!beanDefinition.getMetadata().isAnnotation()) {
@@ -323,7 +340,7 @@ class FeignClientsRegistrar
 
 	protected Set<String> getBasePackages(AnnotationMetadata importingClassMetadata) {
 		Map<String, Object> attributes = importingClassMetadata
-				.getAnnotationAttributes(EnableFeignClients.class.getCanonicalName());
+			.getAnnotationAttributes(EnableFeignClients.class.getCanonicalName());
 
 		Set<String> basePackages = new HashSet<>();
 		for (String pkg : (String[]) attributes.get("value")) {
@@ -342,7 +359,7 @@ class FeignClientsRegistrar
 
 		if (basePackages.isEmpty()) {
 			basePackages.add(
-					ClassUtils.getPackageName(importingClassMetadata.getClassName()));
+				ClassUtils.getPackageName(importingClassMetadata.getClassName()));
 		}
 		return basePackages;
 	}
@@ -377,18 +394,19 @@ class FeignClientsRegistrar
 		}
 
 		throw new IllegalStateException("Either 'name' or 'value' must be provided in @"
-				+ FeignClient.class.getSimpleName());
+			+ FeignClient.class.getSimpleName());
 	}
 
 	private void registerClientConfiguration(BeanDefinitionRegistry registry, Object name,
-			Object configuration) {
+											 Object configuration) {
 		BeanDefinitionBuilder builder = BeanDefinitionBuilder
-				.genericBeanDefinition(FeignClientSpecification.class);
+			.genericBeanDefinition(FeignClientSpecification.class);
 		builder.addConstructorArgValue(name);
 		builder.addConstructorArgValue(configuration);
+		// 注入 FeignClientSpecification （包含 ）EnableFeignClients.defaultConfiguration
 		registry.registerBeanDefinition(
-				name + "." + FeignClientSpecification.class.getSimpleName(),
-				builder.getBeanDefinition());
+			name + "." + FeignClientSpecification.class.getSimpleName(),
+			builder.getBeanDefinition());
 	}
 
 	@Override
@@ -408,6 +426,7 @@ class FeignClientsRegistrar
 
 		/**
 		 * Creates a new {@link AllTypeFilter} to match if all the given delegates match.
+		 *
 		 * @param delegates must not be {@literal null}.
 		 */
 		AllTypeFilter(List<TypeFilter> delegates) {
@@ -417,7 +436,7 @@ class FeignClientsRegistrar
 
 		@Override
 		public boolean match(MetadataReader metadataReader,
-				MetadataReaderFactory metadataReaderFactory) throws IOException {
+							 MetadataReaderFactory metadataReaderFactory) throws IOException {
 
 			for (TypeFilter filter : this.delegates) {
 				if (!filter.match(metadataReader, metadataReaderFactory)) {

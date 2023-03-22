@@ -16,10 +16,10 @@
 
 package org.springframework.cloud.openfeign;
 
+import org.springframework.cloud.context.named.NamedContextFactory;
+
 import java.util.Arrays;
 import java.util.Objects;
-
-import org.springframework.cloud.context.named.NamedContextFactory;
 
 /**
  * @author Dave Syer

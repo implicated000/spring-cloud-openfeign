@@ -24,6 +24,7 @@ import feign.Target;
  */
 interface Targeter {
 
+	// run Feign.Builder.target(target)
 	<T> T target(FeignClientFactoryBean factory, Feign.Builder feign,
 			FeignContext context, Target.HardCodedTarget<T> target);
 
